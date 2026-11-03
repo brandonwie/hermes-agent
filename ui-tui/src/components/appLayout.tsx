@@ -29,7 +29,7 @@ import { ActiveWidgetSlot, AmbientDock, AmbientRail, useAmbientRailWidth } from 
 
 import { AgentsOverlay } from './agentsOverlay.js'
 import { LiveAgentsPanel } from './agentsPanel.js'
-import { GoodVibesHeart, StatusRule, StickyPromptTracker, TranscriptScrollbar } from './appChrome.js'
+import { CompactStatusRule, GoodVibesHeart, StatusRule, StickyPromptTracker, TranscriptScrollbar } from './appChrome.js'
 import { FloatingOverlays, PromptZone } from './appOverlays.js'
 import { Banner, Panel, SessionPanel } from './branding.js'
 import { FpsOverlay } from './fpsOverlay.js'
@@ -539,13 +539,15 @@ const StatusRulePane = memo(function StatusRulePane({
     return null
   }
 
+  const Rule = at === 'bottom' ? CompactStatusRule : StatusRule
+
   return (
     <Box marginTop={at === 'top' ? 1 : 0}>
-      <StatusRule
+      <Rule
         battery={ui.battery ? ui.batteryStatus : null}
         bgCount={ui.bgTasks.size}
         busy={ui.busy}
-        cols={composer.cols}
+        cols={at === 'bottom' ? Math.max(1, composer.cols - 2) : composer.cols}
         compacting={ui.compacting}
         cwdLabel={status.cwdLabel}
         focusView={ui.focusView}
