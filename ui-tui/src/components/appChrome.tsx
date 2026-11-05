@@ -429,7 +429,7 @@ function SpawnHud({ t }: { t: Theme }) {
   )
 }
 
-function SessionDuration({ startedAt }: { startedAt: number }) {
+function SessionDuration({ startedAt, compact = false }: { startedAt: number; compact?: boolean }) {
   const [now, setNow] = useState(() => Date.now())
   const isOccluded = useStore($isStatusRuleOccluded)
 
@@ -447,7 +447,9 @@ function SessionDuration({ startedAt }: { startedAt: number }) {
     return () => clearInterval(id)
   }, [isOccluded, startedAt])
 
-  return fmtDuration(now - startedAt)
+  const label = fmtDuration(now - startedAt)
+
+  return compact ? label.replaceAll(' ', '') : label
 }
 
 function IdleSince({ endedAt }: { endedAt: number }) {
@@ -504,6 +506,111 @@ const shortModelLabel = (model: string) =>
 
 const modelLabel = (model: string, effort?: string, fast?: boolean, effortWire?: string) =>
   [shortModelLabel(model), effortLabel(effort, effortWire), fast ? tr('status.fast') : ''].filter(Boolean).join(' ')
+
+// Bottom placement has its own metric row, so narrow panes need not hide speed or session time.
+export function CompactStatusRule(p: StatusRuleProps) {
+  const ok = (name: string) => p.statusBarFields == null || p.statusBarFields.has(name)
+  const { usage, t } = p
+  const model = modelLabel(p.model, p.modelReasoningEffort, p.modelFast, p.modelReasoningEffortWire) || 'Hermes'
+  const pct = usage.context_percent
+  const mark = usage.context_estimated ? '~' : ''
+
+  const context = usage.context_max
+    ? `${mark}${compactNumber(usage.context_used ?? 0)}/${compactNumber(usage.context_max)}`
+    : '—'
+
+  const tps = typeof usage.avg_tps === 'number' ? Math.round(usage.avg_tps) : '—'
+  const cache = typeof usage.cache_hit_pct === 'number' ? `${Math.round(usage.cache_hit_pct)}%` : '—'
+  const latency = typeof usage.avg_latency_s === 'number' ? `${usage.avg_latency_s.toFixed(1)}s` : '—'
+  const metrics: { id: string; value: ReactNode }[] = []
+
+  if (ok('context_detail') || ok('context_pct')) {
+    metrics.push({
+      id: 'context',
+      value: (
+        <Text color={ctxBarColor(pct ?? undefined, t)}>
+          ctx{context}
+          {ok('context_pct') && pct != null ? `(${mark}${pct}%)` : ''}
+        </Text>
+      )
+    })
+  }
+
+  if (ok('tps')) {
+    metrics.push({ id: 'tps', value: `${tps}t/s` })
+  }
+
+  if (ok('duration')) {
+    metrics.push({
+      id: 'duration',
+      value: <>sess{p.sessionStartedAt != null ? <SessionDuration compact startedAt={p.sessionStartedAt} /> : '—'}</>
+    })
+  }
+
+  if (ok('cache_hit')) {
+    metrics.push({ id: 'cache', value: `cache${cache}` })
+  }
+
+  if (ok('latency')) {
+    metrics.push({ id: 'latency', value: `lat${latency}` })
+  }
+
+  if (ok('compressions') && usage.compressions) {
+    metrics.push({ id: 'compressions', value: `cmp${usage.compressions}` })
+  }
+
+  if (ok('bg_tasks') && p.bgCount) {
+    metrics.push({ id: 'background', value: `bg${p.bgCount}` })
+  }
+
+  if (ok('bg_subagents') && usage.active_subagents) {
+    metrics.push({ id: 'subagents', value: `agents${usage.active_subagents}` })
+  }
+
+  const notice = !p.busy ? p.notice : null
+
+  return (
+    <Box flexDirection="column" flexShrink={0} width={p.cols}>
+      <Box height={1}>
+        <Box flexShrink={0}>
+          <Text color={t.color.accent}>{model}</Text>
+          <Text color={t.color.muted}>│</Text>
+          <Text color={notice ? noticeColor(notice.level, t) : p.statusColor} wrap="truncate-end">
+            {p.busy ? (
+              <FaceTicker
+                color={p.statusColor}
+                startedAt={p.turnStartedAt}
+                style="unicode"
+                verbOverride={p.compacting ? messages().status.compacting : undefined}
+              />
+            ) : notice ? (
+              notice.text
+            ) : (
+              displayStatus(p.status)
+            )}
+          </Text>
+          {p.focusView ? <Text color={t.color.warn}>│◉focus</Text> : null}
+          {p.battery?.available && ok('battery') ? (
+            <Text color={batteryColor(p.battery, t)}>│{batteryLabel(p.battery)}</Text>
+          ) : null}
+          <SpawnHud t={t} />
+        </Box>
+        <Text color={t.color.border}>│</Text>
+        <Text color={t.color.label} wrap="truncate-end">
+          {p.cwdLabel}
+        </Text>
+      </Box>
+      <Text color={t.color.muted} wrap="truncate-end">
+        {metrics.map(({ id, value }, index) => (
+          <Text key={id}>
+            {index ? '│' : ''}
+            {value}
+          </Text>
+        ))}
+      </Text>
+    </Box>
+  )
+}
 
 export function GoodVibesHeart({ tick, t }: { tick: number; t: Theme }) {
   const [active, setActive] = useState(false)
